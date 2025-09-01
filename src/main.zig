@@ -85,7 +85,7 @@ pub const Agent = struct {
         });
     }
 
-    pub fn think(self: *Self, input: []const u8) ![]u8 {
+    pub fn think(self: *Self, input: []const u8) ![]const u8 {
         // Add user input to conversation
         try self.addMessage("user", input);
 
@@ -124,7 +124,7 @@ pub const Agent = struct {
         return response;
     }
 
-    fn sendToOllama(self: *Self, request: OllamaRequest) ![]u8 {
+    fn sendToOllama(self: *Self, request: OllamaRequest) ![]const u8 {
         var client = http.Client{ .allocator = self.allocator };
         defer client.deinit();
 
@@ -147,21 +147,24 @@ pub const Agent = struct {
 
         // Read response
         var res = try req.receiveHead(&.{});
-        var it = res.head.iterateHeaders();
-        while (it.next()) |header| {
-            std.debug.print("response header name = {s}, value = {s}\n", .{ header.name, header.value });
-        }
-
-        var body_reader = res.reader(&.{});
+        // var it = res.head.iterateHeaders();
+        // while (it.next()) |header| {
+        //     std.debug.print("response header name = {s}, value = {s}\n", .{ header.name, header.value });
+        // }
+        var reader = res.reader(&.{});
 
         var writer_alloc = std.Io.Writer.Allocating.init(self.allocator);
         defer writer_alloc.deinit();
         const writer = &writer_alloc.writer;
-        _ = try body_reader.streamRemaining(writer);
+
+        _ = try reader.streamRemaining(writer);
         const response_body = writer_alloc.written();
 
         // Parse JSON response
-        const parsed = try json.parseFromSlice(OllamaResponse, self.allocator, response_body, .{});
+        const parsed = json.parseFromSlice(OllamaResponse, self.allocator, response_body, .{}) catch |e| {
+            std.debug.print("Failed to parse Ollama JSON. Body:\n{s}\n", .{response_body});
+            return e;
+        };
         defer parsed.deinit();
 
         return try self.allocator.dupe(u8, parsed.value.message.content);
