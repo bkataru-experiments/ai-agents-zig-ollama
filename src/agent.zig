@@ -12,7 +12,7 @@ const AgentRole = enum {
     planner,
 };
 
-const Message = struct {
+pub const Message = struct {
     role: []const u8,
     content: []const u8,
 };
